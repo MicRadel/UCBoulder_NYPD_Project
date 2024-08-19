@@ -1,0 +1,138 @@
+---
+title: "NYPD Shooting rmd"
+author: "M. Radel"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+fig_width: 8
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data Gathering and Cleaning
+
+**The following data were obtained via the data.gov resource. The csv file can be found at data_file. Libraries I used are also being initialized here. Since I'm not uploading the .rmd file itself, I've included all chunks of code as well.**
+```{r data_load}
+library(tidyverse)
+library(lubridate)
+library(hms)
+library(bioRad)
+
+dataURL <- "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+
+data_file <- read.csv(dataURL)
+```
+
+**To clean the data, I have removed latitude and longitude information, along with coordinate information as I don't plan to use them. I have also chosen to remove the incident_key so data can be aggregated by unifying factors like race, borough, or time of day of the incident. After cleaning that and seeing how few entries were in the location descriptions, I removed those too, especially since there were multiple similar entries that would have been difficult to categorize. Finally I removed areas where data was sparse, which included victim and perpetrator demographics. **
+
+**To make the data easier to analyze, I converted the dates and times to date and time format rather than char, I made the BORO column into factors, and I converted the statistical murder flag to a boolean value, since it comes in as char as well.**
+
+```{r data_clean}
+
+#Initial selection of columns I want to keep
+clean_data <- data_file %>% subset(select = OCCUR_DATE:STATISTICAL_MURDER_FLAG) %>%
+subset(select = -c(LOC_OF_OCCUR_DESC,LOC_CLASSFCTN_DESC,LOCATION_DESC))
+
+#Adjusting date type from char to date
+clean_data$OCCUR_DATE <- parse_date(clean_data$OCCUR_DATE,format = "%m/%d/%Y")
+
+#Adjusting time type from char to time
+clean_data$OCCUR_TIME <- clean_data$OCCUR_TIME %>% strptime(format = "%H:%M:%S") %>% as_hms()
+
+#Converting boroughs to factors
+clean_data$BORO <- as_factor(clean_data$BORO)
+
+#converting murder flag data from char to bool
+clean_data$STATISTICAL_MURDER_FLAG <- as.logical(clean_data$STATISTICAL_MURDER_FLAG)
+```
+## Visualization #1: When do these happen?
+
+**The first visualization I decided to create plots the date of incident on the x-axis and the time of incident on the y-axis. There's a pretty clear reduction in density during the morning hours, which I thought was interesting. **
+
+```{r data_visualization_1}
+
+ggplot(data=clean_data) +
+  #Inputting data for plot
+  geom_point(mapping = aes(x = OCCUR_DATE, y = OCCUR_TIME)) + 
+    #Various aesthetic upgrades
+    ggtitle("Time of Day for Incident Visualization")+
+    xlab("Occur Date") + ylab("Occur Time")
+
+
+```
+
+## Visualization #2: What about deadly events?
+
+**After seeing those results, I wondered if the time of day of the incident had any impact on the fatality. For this, I created essentially the same plot but this time I included color as an indicator of fatality. Interestingly, it didn't seem like the time of day had any sort of correlation to fatality and, in fact, the fatalities seem to be scattered quite homogeneously throughout the plot. **
+```{r data_visualization_2}
+
+ggplot(data=clean_data) +
+  #Getting data for plot
+  geom_point(mapping = aes(x = OCCUR_DATE, y = OCCUR_TIME,color = STATISTICAL_MURDER_FLAG, alpha=.3)) +
+    #Various aesthetic upgrades
+    ggtitle("Time of Day Visualization for Deadly Events") +
+    xlab("Occur Date") + ylab("Occur Time") + labs(color = "Event was deadly")
+```
+
+## Visualization #3: What about the sun?
+
+**For one final addition to this visual, I decided I wanted to model the sunrise and sunset data in New York City to see if this was truly a case of "crime at night only". Interestingly, it does look like the number of incidents sharply drops at sunrise, but the incidents begin to increase in frequency again well before sunset. While perhaps not suprising, I did find it interesting how stark the drop in frequency is right at sunrise.**
+```{r visualization_with_model}
+
+#creating new table for sunrise/sunset data
+sun_data <- clean_data %>%
+  select(OCCUR_DATE) %>%
+  mutate(sunrise = sunrise(OCCUR_DATE, lon = -74.0060, lat = 40.7128, tz = "America/New_York")) %>%
+  mutate(sunset = sunset(OCCUR_DATE, lon = -74.0060, lat = 40.7128, tz = "America/New_York"))
+
+#formatting for time only
+sun_data$sunrise <- as_hms(format(sun_data$sunrise,format = "%H:%M:%S"))
+sun_data$sunset <- as_hms(format(sun_data$sunset,format = "%H:%M:%S"))
+
+ggplot(data=clean_data) +
+  #Getting data for plot
+  geom_point(mapping = aes(x = OCCUR_DATE, y = OCCUR_TIME,alpha=.2), color ="black") +
+  geom_line(mapping = aes(x = sun_data$OCCUR_DATE, y = sun_data$sunrise), color = "orange", linewidth= 2)+ 
+  geom_line(mapping = aes(x = sun_data$OCCUR_DATE, y = sun_data$sunset), color = "purple", linewidth =2) +
+    #Various aesthetic upgrades
+    ggtitle("Time of Day Visualization for Events with Sunrise and Sunset Modeled on Top") +
+    xlab("Occur Date") + ylab("Occur Time")
+
+
+
+```
+
+## Visualization 4: Does location matter?
+
+**As a point of interest from there, I decided to look and see if the fatality data differed significantly by borough. To do this, I created an additional dataset which was grouped by borough. The data is in summary below. I visualized this with a double bar graph, which shows both the total number of incidents and the total number of fatal incidents per borough.**
+```{r data_visualization_3}
+#Creating a new data table to summarize data by borough
+combined <- clean_data %>%
+  group_by(BORO) %>%
+  summarize(total_deaths = sum(STATISTICAL_MURDER_FLAG),
+            total_incidents = n())
+
+#printing summary data results
+print(combined)
+
+#Visualizing new table
+plot <- barplot(t(combined[c('total_incidents','total_deaths')]),
+                beside = T,
+                names.arg = combined$BORO,
+                xlab = "Borough",
+                ylab = "Count",
+                cex.names = 0.7,
+                ylim = range(0:12000),
+                legend.text = c("Total Incidents","Total Deaths")
+                )
+
+```
+
+## Conclusions and Other Considerations
+
+**After doing my initial data clean and analysis, I looked back through the process I used and the data I ended up using in my analysis. As I went, I realized I was focusing on a smaller subset of data than I initially thought I would use, and so my clean data file became even smaller, as well as slightly more clean and easy to work with. I looked at my initial graphs and realized that in my borough analysis, Staten Island didn't show up on the x-axis as a label, so I needed to make that font size smaller. I think otherwise, the graph may have been a bit confusing or even misleading.** 
+
+**Since there were a few columns in the initial data that contained subjective comments, such as the description of location, I made sure to exclude those. Although I had already planned on excluding them, I did realize they have the potential to introduce bias since the descriptions of locations were all unique and not from a dropdown menu, meaning that two officers inputting the same incident may potentially use a different way of describing the location. As for my own bias, I entered my analysis trying to not make assumptions about what my analysis would find. I made sure that each data point was represented as well, since the data I analyzed doesn't really have any outliers. As a final adjustment to make sure my visualizations appeared as unbiased as possible, I changed the alpha value of my scatter plot showing deadly events since each point is packed so densely. This makes it easier to see more data points than previously.**
