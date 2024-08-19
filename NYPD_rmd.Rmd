@@ -1,8 +1,3 @@
-*Note: I included some libraries not used in class. They are listed here*
-library(tidyverse)
-library(lubridate)
-library(hms)
-library(bioRad)
 ---
 title: "NYPD Shooting rmd"
 author: "M. Radel"
@@ -12,6 +7,12 @@ output:
   html_document: default
 fig_width: 8
 ---
+
+**Note: I included some libraries not used in class. They are listed here:**
+library(tidyverse)
+library(lubridate)
+library(hms)
+library(bioRad)
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -80,6 +81,20 @@ ggplot(data=clean_data) +
     #Various aesthetic upgrades
     ggtitle("Time of Day Visualization for Deadly Events") +
     xlab("Occur Date") + ylab("Occur Time") + labs(color = "Event was deadly")
+```
+
+
+**However, this isn't the most clear image to see each type of event, so I also separated the two for a side-by-side comparison**
+
+```{r data_visualization_2b}
+ggplot(data=clean_data) +
+  #Getting data for plot
+  geom_point(mapping = aes(x = OCCUR_DATE, y = OCCUR_TIME,color = STATISTICAL_MURDER_FLAG, alpha=.3)) +
+  facet_wrap(~STATISTICAL_MURDER_FLAG) +
+    #Various aesthetic upgrades
+    ggtitle("Time of Day Visualization for Deadly Events") +
+    xlab("Occur Date") + ylab("Occur Time") + labs(color = "Event was deadly")
+
 ```
 
 ## Visualization #3: What about the sun?
