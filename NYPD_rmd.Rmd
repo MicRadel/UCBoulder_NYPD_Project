@@ -1,3 +1,8 @@
+*Note: I included some libraries not used in class. They are listed here*
+library(tidyverse)
+library(lubridate)
+library(hms)
+library(bioRad)
 ---
 title: "NYPD Shooting rmd"
 author: "M. Radel"
